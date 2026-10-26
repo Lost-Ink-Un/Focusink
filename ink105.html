@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Card Focus</title>
 <style>
 :root{--bg:#f5f4f1;--panel:#fff;--ink:#1f2328;--mute:#6b7280;--line:#d9d7d1;--acc:#2f6f73;--acc-ink:#fff;--field:#fbfbf9;--danger:#a4332b;--fs:14px;color-scheme:light}
@@ -52,10 +52,11 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 #theme{padding:4px 10px;font-size:16px;line-height:1.2}
 .thumb{width:64px;height:96px;object-fit:cover;border-radius:6px;border:1px solid var(--line);background:var(--field)}
 .imgrow{display:flex;align-items:center;gap:12px}
-.pane{flex:1;overflow:auto;overscroll-behavior:contain;padding:14px;display:none}
+.pane{flex:1;overflow:auto;overflow-anchor:none;overscroll-behavior:contain;padding:14px;display:none}
 .pane.on{display:block}
+@media (pointer:coarse){.pane{padding-bottom:40vh}}   /* touch: room to scroll the last fields above the keyboard */
 textarea,input[type=text],input[type=number],input[type=search],select{width:100%;font:inherit;font-size:var(--fs);color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
-textarea{resize:vertical;min-height:90px;line-height:1.5}
+textarea{resize:vertical;min-height:90px;line-height:1.5;field-sizing:content}
 .item{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:14px}
 .item .top{display:flex;align-items:center;gap:8px;margin-bottom:6px;color:var(--mute);font-size:calc(var(--fs) - 1px)}
 .item .top b{color:var(--ink);flex:1}
@@ -307,7 +308,9 @@ async function exportCard(){              // the only action that writes a PNG f
 
 /* ---------- Editor ---------- */
 const el=(t,p={},...k)=>{const e=Object.assign(document.createElement(t),p);e.append(...k);return e};
+const NATIVE_SIZE=CSS.supports('field-sizing','content');   // newer browsers size the boxes themselves
 function grow(t){
+  if(NATIVE_SIZE)return;
   const p=t.closest('.pane'),y=p?p.scrollTop:0;      // remember the pane's scroll position
   t.style.height='auto';t.style.height=Math.max(90,t.scrollHeight+2)+'px';
   if(p)p.scrollTop=y;
