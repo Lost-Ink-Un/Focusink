@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card Focus</title>
+<style>
+:root{--bg:#f5f4f1;--panel:#fff;--ink:#1f2328;--mute:#6b7280;--line:#d9d7d1;--acc:#2f6f73;--acc-ink:#fff;--field:#fbfbf9;--danger:#a4332b;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#16181a;--panel:#1d2022;--ink:#e6e6e3;--mute:#8d949c;--line:#33383c;--acc:#5fb0b5;--acc-ink:#0f1a1b;--field:#17191b;--danger:#e08a82;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+header .name{font-weight:600;flex:0 1 auto;max-width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header .name small{font-weight:400;color:var(--mute);margin-left:8px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:5px 12px;border-radius:6px}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+main{flex:1;display:flex;min-height:0}
+#left{width:50%;min-width:260px;display:flex;flex-direction:column;background:var(--panel)}
+#right{flex:1;min-width:200px;display:flex;flex-direction:column}
+#div{width:9px;cursor:col-resize;background:var(--line);flex:none;touch-action:none}
+body.dragging{user-select:none;cursor:col-resize}
+body.dragging iframe{pointer-events:none}
+#div:hover,#div.drag{background:var(--acc)}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs>button{border:0;border-bottom:2px solid transparent;border-radius:0;padding:9px 16px;background:none;color:var(--mute)}
+.tabs>button.on{color:var(--ink);border-bottom-color:var(--acc);font-weight:600}
+.tabs{align-items:center}
+.nav{margin-left:auto;display:flex;gap:4px;align-items:center;padding-right:10px}
+.nav button{padding:2px 10px}
+.nav input{width:54px;text-align:center;padding:3px 4px;-moz-appearance:textfield}
+.nav input::-webkit-outer-spin-button,.nav input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.nav #of{color:var(--mute);font-size:12px;min-width:30px}
+.item.flash{animation:fl 1.2s ease-out}
+@keyframes fl{from{box-shadow:0 0 0 3px var(--acc)}to{box-shadow:0 0 0 3px transparent}}
+#state{font-size:12px;color:var(--mute)}
+#state.dirty{color:var(--acc);font-weight:600}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:0;width:min(580px,92vw)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+.dh{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.dh b{flex:1}
+#dlist{overflow:auto;max-height:60vh;padding:4px 14px 10px}
+.drow{display:flex;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.dinfo{flex:1;min-width:0}
+.dinfo b,.dinfo small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dinfo small{color:var(--mute)}
+.search{flex:1;display:flex;align-items:center;gap:4px;min-width:0}
+.search input{max-width:380px;padding:5px 9px}
+#qc{font-size:12px;color:var(--mute);min-width:52px}
+.pane{flex:1;overflow:auto;padding:14px;display:none}
+.pane.on{display:block}
+textarea,input[type=text],input[type=number],input[type=search],select{width:100%;font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+textarea{resize:vertical;min-height:90px;line-height:1.5}
+.item{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:14px}
+.item .top{display:flex;align-items:center;gap:8px;margin-bottom:6px;color:var(--mute);font-size:13px}
+.item .top b{color:var(--ink);flex:1}
+.item .top button{padding:2px 9px;font-size:12px}
+.rm:hover{color:var(--danger);border-color:var(--danger)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+label.f{display:block;font-size:12px;color:var(--mute)}
+label.f>*{margin-top:2px;color:var(--ink)}
+.checks{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;font-size:13px}
+.checks label{display:flex;align-items:center;gap:5px}
+.empty{color:var(--mute);text-align:center;padding:50px 20px}
+#drop{display:none;position:fixed;inset:0;background:color-mix(in srgb,var(--acc) 18%,transparent);border:3px dashed var(--acc);z-index:9;align-items:center;justify-content:center;font-size:20px;pointer-events:none}
+#drop.on{display:flex}
+iframe{flex:1;border:0;width:100%;background:transparent}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:7px 14px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <button id="open">Open card</button>
+  <div class="name" id="cname"></div>
+  <div class="search">
+    <input id="q" type="search" placeholder="Search all fields" aria-label="Search fields">
+    <span id="qc"></span>
+    <button id="qp" aria-label="Previous match">&#8249;</button>
+    <button id="qn" aria-label="Next match">&#8250;</button>
+  </div>
+  <span id="state"></span>
+  <button id="drafts" title="Browse saved drafts">Drafts</button>
+  <button id="save" disabled title="Save a new draft (Ctrl+S)">Save draft</button>
+  <button class="primary" id="export" disabled title="Write the card to a PNG file">Export card</button>
+</header>
+<main id="main">
+  <section id="left">
+    <div class="tabs">
+      <button class="on" data-t="df">Definition</button>
+      <button data-t="gr">Greetings</button>
+      <button data-t="lb">Lorebook</button>
+      <div class="nav" title="Jump to a greeting / entry">
+        <button id="prev" aria-label="Previous">&#8249;</button>
+        <input id="num" type="number" min="1" value="1" aria-label="Item number">
+        <span id="of">/ 0</span>
+        <button id="next" aria-label="Next">&#8250;</button>
+        <button id="go">Go</button>
+      </div>
+    </div>
+    <div class="pane on" id="df"></div>
+    <div class="pane" id="gr"></div>
+    <div class="pane" id="lb"></div>
+  </section>
+  <div id="div" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+  <section id="right"><iframe id="pv" sandbox="allow-same-origin" title="Card preview"></iframe></section>
+</main>
+<dialog id="dlg">
+  <div class="dh"><b>Drafts</b><button id="dclose">Close</button></div>
+  <div id="dlist"></div>
+</dialog>
+<div id="drop">Drop PNG card to open</div>
+<div id="toast"></div>
+<input type="file" id="file" accept="image/png" hidden>
+
+<script>
+const $=s=>document.querySelector(s);
+let png=null,card=null,hadV3=false,fname='card.png';
+const enc=new TextEncoder(),dec=new TextDecoder();
+
+/* ---------- PNG chunks ---------- */
+const crcT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=crcT[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0};
+function parsePng(buf){
+  const u=new Uint8Array(buf),v=new DataView(buf),sig=[137,80,78,71,13,10,26,10];
+  if(u.length<8||sig.some((x,i)=>u[i]!==x))throw Error('Not a PNG file');
+  const chunks=[];let p=8;
+  while(p+8<=u.length){
+    const len=v.getUint32(p),type=dec.decode(u.subarray(p+4,p+8));
+    chunks.push({type,data:u.slice(p+8,p+8+len)});p+=12+len;
+    if(type==='IEND')break;
+  }
+  return chunks;
+}
+const b64d=s=>{const bin=atob(s.trim());return dec.decode(Uint8Array.from(bin,c=>c.charCodeAt(0)))};
+const b64e=s=>{let bin='';for(const b of enc.encode(s))bin+=String.fromCharCode(b);return btoa(bin)};
+function textOf(ch){ // returns [keyword,text] for tEXt / uncompressed iTXt
+  const d=ch.data;let i=d.indexOf(0);const key=dec.decode(d.subarray(0,i));
+  if(ch.type==='tEXt')return[key,dec.decode(d.subarray(i+1))];
+  if(ch.type==='iTXt'&&d[i+1]===0){let j=i+3;j=d.indexOf(0,j);j=d.indexOf(0,j+1);return[key,dec.decode(d.subarray(j+1))]}
+  return null;
+}
+function mkText(key,text){
+  const k=enc.encode(key),t=enc.encode(text),d=new Uint8Array(k.length+1+t.length);
+  d.set(k);d.set(t,k.length+1);return{type:'tEXt',data:d};
+}
+function buildPng(chunks){
+  const parts=[Uint8Array.from([137,80,78,71,13,10,26,10])];
+  for(const c of chunks){
+    const out=new Uint8Array(12+c.data.length),v=new DataView(out.buffer),ty=enc.encode(c.type);
+    v.setUint32(0,c.data.length);out.set(ty,4);out.set(c.data,8);
+    const body=new Uint8Array(4+c.data.length);body.set(ty);body.set(c.data,4);
+    v.setUint32(8+c.data.length,crc(body));parts.push(out);
+  }
+  return new Blob(parts,{type:'image/png'});
+}
+
+/* ---------- Load / save ---------- */
+function normalize(o){
+  if(o.spec&&o.data)return o;
+  return{spec:'chara_card_v2',spec_version:'2.0',data:{...o}}; // V1 flat card
+}
+let dirty=false,pending=false,pngBuf=null,imgId='';
+const FT=[{description:'PNG character card',accept:{'image/png':['.png']}}];
+
+/* Drafts live in this browser (IndexedDB): 'drafts' = one record per save, never overwritten;
+   'imgs' = the card image each draft belongs to, stored once and shared by its drafts. */
+let dbp;
+const idb=()=>dbp||(dbp=new Promise((res,rej)=>{
+  const r=indexedDB.open('card-focus-drafts',1);
+  r.onupgradeneeded=()=>{r.result.createObjectStore('drafts',{keyPath:'id'});r.result.createObjectStore('imgs',{keyPath:'id'})};
+  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}));
+async function run(stores,mode,fn){      // fn(tx) returns the request whose result we want
+  try{const db=await idb();return await new Promise((res,rej)=>{
+    const t=db.transaction(stores,mode),r=fn(t);
+    t.oncomplete=()=>res(r.result===undefined?true:r.result);t.onerror=t.onabort=()=>rej(t.error)})}
+  catch(e){return null}
+}
+const allDrafts=async()=>((await run('drafts','readonly',t=>t.objectStore('drafts').getAll()))||[]).sort((a,b)=>b.id-a.id);
+
+const pad=n=>String(n).padStart(2,'0');
+const stamp=t=>{const d=new Date(t);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'_'+pad(d.getHours())+'-'+pad(d.getMinutes())+'-'+pad(d.getSeconds())};
+const dTitle=d=>(d.name||d.file.replace(/\.png$/i,''))+'_'+stamp(d.id);
+
+function setDirty(v,msg=''){dirty=v;const s=$('#state');s.textContent=v?'\u25CF Not exported yet':msg;s.classList.toggle('dirty',v)}
+function markDirty(){if(card){setDirty(true);pending=true}}      // pending = changes not yet in any draft
+const canDiscard=()=>!(dirty&&pending)||confirm('You have changes that are neither exported nor saved as a draft. Continue and discard them?');
+
+async function load(file){
+  if(card&&!canDiscard())return;
+  try{
+    await ingest(await file.arrayBuffer(),file.name,'i'+Date.now(),null);
+    toast('Loaded '+file.name);
+  }catch(e){toast(e.message)}
+}
+async function ingest(buf,name,id,saved){
+  const chunks=parsePng(buf);let v2=null,v3=null;
+  for(const c of chunks){const t=textOf(c);if(!t)continue;
+    if(t[0]==='chara')v2=JSON.parse(b64d(t[1]));
+    if(t[0]==='ccv3')v3=JSON.parse(b64d(t[1]));}
+  const base=v3||v2;
+  if(!base)throw Error('No character data found in this PNG');
+  png=chunks;pngBuf=buf;imgId=id;card=saved||normalize(base);hadV3=!!v3;fname=name;
+  const d=card.data;
+  d.alternate_greetings=d.alternate_greetings||[];
+  d.first_mes=d.first_mes||'';
+  $('#cname').innerHTML='';$('#cname').append(d.name||'Unnamed');
+  const s=document.createElement('small');s.textContent=name+' \u00B7 '+(hadV3?'V3':card.spec==='chara_card_v2'?'V2':'V1');
+  $('#cname').append(s);
+  $('#save').disabled=false;$('#export').disabled=false;
+  pending=false;setDirty(false);renderAll();
+}
+
+/* ---------- Drafts ---------- */
+async function saveDraft(auto){           // always a NEW record, named card_YYYY-MM-DD_HH-MM-SS
+  if(!card)return;
+  const rec={id:Date.now(),imgId,file:fname,name:card.data.name||'',json:JSON.stringify(card)};
+  pending=false;
+  const ok=await run(['drafts','imgs'],'readwrite',t=>{
+    t.objectStore('imgs').put({id:imgId,buf:pngBuf});
+    return t.objectStore('drafts').put(rec)});
+  if(!ok)pending=true;
+  toast(ok?(auto?'Autosaved draft ':'Draft saved ')+dTitle(rec):'This browser could not store the draft');
+}
+async function loadDraft(d,auto){
+  if(card&&!canDiscard())return;
+  const im=await run('imgs','readonly',t=>t.objectStore('imgs').get(d.imgId));
+  if(!im||!im.buf){toast('The image for this draft is missing');return}
+  try{
+    await ingest(im.buf,d.file,d.imgId,JSON.parse(d.json));
+    setDirty(true);$('#dlg').open&&$('#dlg').close();
+    toast((auto?'Restored latest draft ':'Loaded draft ')+dTitle(d));
+  }catch(e){toast(e.message)}
+}
+async function delDraft(d){
+  if(!confirm('Delete this draft permanently?'))return;
+  await run('drafts','readwrite',t=>t.objectStore('drafts').delete(d.id));
+  if(!(await allDrafts()).some(x=>x.imgId===d.imgId))
+    await run('imgs','readwrite',t=>t.objectStore('imgs').delete(d.imgId));
+  openDrafts();
+}
+async function openDrafts(){
+  const box=$('#dlist'),list=await allDrafts();box.innerHTML='';
+  if(!list.length)box.append(el('div',{className:'empty'},'No drafts yet. Click Save draft, or edit a card and one is saved every 5 minutes.'));
+  list.forEach(d=>box.append(el('div',{className:'drow'},
+    el('div',{className:'dinfo'},el('b',{title:dTitle(d)},dTitle(d)),el('small',{},d.file)),
+    el('button',{textContent:'Load',onclick:()=>loadDraft(d)}),
+    el('button',{className:'rm',textContent:'Delete',onclick:()=>delDraft(d)}))));
+  if(!$('#dlg').open)$('#dlg').showModal();
+}
+
+/* ---------- Export ---------- */
+function makePng(){
+  const mk=(spec,ver)=>JSON.stringify({...card,spec,spec_version:ver});
+  const keep=png.filter(c=>{const t=textOf(c);return!(t&&(t[0]==='chara'||t[0]==='ccv3'))});
+  const iend=keep.findIndex(c=>c.type==='IEND');
+  const add=[mkText('chara',b64e(mk('chara_card_v2','2.0')))];
+  if(hadV3)add.push(mkText('ccv3',b64e(mk('chara_card_v3','3.0'))));
+  keep.splice(iend<0?keep.length:iend,0,...add);
+  return buildPng(keep);
+}
+async function exportCard(){              // the only action that writes a PNG file
+  if(!card)return;
+  const blob=makePng(),sug=fname.replace(/\.png$/i,'')+' (edited).png';
+  if(window.showSaveFilePicker){
+    try{const h=await showSaveFilePicker({suggestedName:sug,types:FT});
+      const w=await h.createWritable();await w.write(blob);await w.close();
+      setDirty(false,'Exported');toast('Exported '+h.name)}
+    catch(e){if(e.name!=='AbortError')toast(e.message)}
+    return;
+  }
+  const url=URL.createObjectURL(blob);
+  const a=Object.assign(document.createElement('a'),{href:url,download:sug});
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+  setDirty(false,'Exported');toast('Exported '+sug);
+}
+
+/* ---------- Editor ---------- */
+const el=(t,p={},...k)=>{const e=Object.assign(document.createElement(t),p);e.append(...k);return e};
+function grow(t){t.style.height='auto';t.style.height=Math.max(90,t.scrollHeight+2)+'px'}
+const DEF=[['description','Description'],['personality','Personality'],['scenario','Scenario'],['mes_example','Example dialogue'],
+  ['system_prompt','System prompt'],['post_history_instructions','Post-history instructions'],['creator_notes','Creator notes']];
+function renderDefinition(){
+  const box=$('#df'),d=card.data;box.innerHTML='';
+  DEF.forEach(([k,label])=>{
+    const ta=el('textarea',{value:d[k]||''});
+    ta.oninput=()=>{d[k]=ta.value;grow(ta)};
+    box.append(el('div',{className:'item'},el('div',{className:'top'},el('b',{},label)),ta));
+  });
+  box.querySelectorAll('textarea').forEach(grow);syncNav();
+}
+function renderAll(){renderDefinition();renderGreetings();renderLore();preview()}
+
+function renderGreetings(){
+  const box=$('#gr'),d=card.data;box.innerHTML='';
+  const all=[d.first_mes,...d.alternate_greetings];
+  all.forEach((txt,i)=>{
+    const ta=el('textarea',{value:txt});
+    ta.oninput=()=>{if(i===0)d.first_mes=ta.value;else d.alternate_greetings[i-1]=ta.value;grow(ta);preview()};
+    const top=el('div',{className:'top'},el('b',{},i===0?'Greeting 1 · first message':'Greeting '+(i+1)));
+    if(i>0){const r=el('button',{className:'rm',textContent:'Remove'});
+      r.onclick=()=>{d.alternate_greetings.splice(i-1,1);renderGreetings();preview()};top.append(r)}
+    box.append(el('div',{className:'item'},top,ta));
+  });
+  box.append(el('button',{textContent:'Add greeting',onclick:()=>{d.alternate_greetings.push('');renderGreetings();preview();
+    const l=box.querySelectorAll('textarea');l[l.length-1].focus();box.scrollTop=box.scrollHeight}}));
+  box.querySelectorAll('textarea').forEach(grow);syncNav();
+}
+
+function entryDefaults(){return{keys:[],secondary_keys:[],comment:'',name:'',content:'',enabled:true,constant:false,selective:false,
+  case_sensitive:false,insertion_order:100,priority:10,position:'before_char',extensions:{}}}
+function renderLore(){
+  const box=$('#lb'),d=card.data;box.innerHTML='';
+  if(!d.character_book)d.character_book=null;
+  const book=d.character_book;
+  if(!book){
+    box.append(el('div',{className:'empty'},'This card has no attached lorebook.',el('br'),el('br'),
+      el('button',{textContent:'Create lorebook',onclick:()=>{d.character_book={name:'',entries:[],extensions:{}};renderLore()}})));
+    return;
+  }
+  book.entries=book.entries||[];
+  const nm=el('input',{type:'text',value:book.name||'',placeholder:'Lorebook name'});
+  nm.oninput=()=>book.name=nm.value;
+  box.append(el('label',{className:'f',style:'margin-bottom:14px'},'Lorebook name',nm));
+  book.entries.forEach((e,i)=>{
+    const lbl=(text,node)=>el('label',{className:'f'},text,node);
+    const inp=(prop,type='text',list)=>{
+      const n=el('input',{type,value:list?(e[prop]||[]).join(', '):(e[prop]??'')});
+      n.oninput=()=>{e[prop]=list?n.value.split(',').map(s=>s.trim()).filter(Boolean):type==='number'?Number(n.value):n.value;
+        if(prop==='comment')title.textContent=e.comment||e.name||'Entry '+(i+1)};
+      return n};
+    const chk=(prop,text)=>{const c=el('input',{type:'checkbox',checked:!!e[prop]});c.onchange=()=>e[prop]=c.checked;return el('label',{},c,text)};
+    const ext=(k,text)=>{e.extensions=e.extensions||{};const n=el('input',{type:'number',min:0,value:e.extensions[k]??0});
+      n.oninput=()=>{e.extensions[k]=Number(n.value)||0};return lbl(text,n)};
+    const title=el('b',{},e.comment||e.name||'Entry '+(i+1));
+    const rm=el('button',{className:'rm',textContent:'Remove',onclick:()=>{book.entries.splice(i,1);renderLore()}});
+    const ct=el('textarea',{value:e.content||''});ct.oninput=()=>{e.content=ct.value;grow(ct)};
+    const pos=el('select',{},...['before_char','after_char'].map(v=>el('option',{value:v,textContent:v.replace('_',' '),selected:e.position===v})));
+    pos.onchange=()=>e.position=pos.value;
+    box.append(el('div',{className:'item'},
+      el('div',{className:'top'},title,rm),
+      el('div',{className:'grid'},lbl('Name / comment',inp('comment')),lbl('Keys (comma separated)',inp('keys','text',true))),
+      lbl('Secondary keys (comma separated)',inp('secondary_keys','text',true)),
+      el('div',{style:'margin-top:8px'},lbl('Content',ct)),
+      el('div',{className:'checks'},chk('enabled','Enabled'),chk('constant','Constant'),chk('selective','Selective'),chk('case_sensitive','Case sensitive')),
+      el('div',{className:'grid3'},lbl('Insertion order',inp('insertion_order','number')),lbl('Priority',inp('priority','number')),lbl('Position',pos)),
+      el('div',{className:'grid3'},ext('sticky','Sticky (turns)'),ext('cooldown','Cooldown (turns)'),ext('delay','Delay (turns)'))));
+  });
+  box.append(el('button',{textContent:'Add entry',onclick:()=>{
+    const n=entryDefaults();n.id=book.entries.reduce((m,x)=>Math.max(m,Number(x.id)||0),-1)+1;book.entries.push(n);renderLore();box.scrollTop=box.scrollHeight}}));
+  box.querySelectorAll('textarea').forEach(grow);syncNav();
+}
+
+/* ---------- Preview ---------- */
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function md(src){
+  const d=card.data,stash=[];
+  const keep=h=>{stash.push(h);return '\u0000'+(stash.length-1)+'\u0000'};
+  const at=u=>u.replace(/"/g,'&quot;');
+  src=src.replace(/\{\{char\}\}|<BOT>/gi,d.name||'Character').replace(/\{\{user\}\}|<USER>/gi,'User');
+  return src.split(/(<style[\s\S]*?<\/style>|<!--[\s\S]*?-->|<[^>]*>)/i).map((seg,i)=>{
+    if(i%2)return seg;                       // tags and style blocks pass through untouched
+    return seg.replace(/\r/g,'')
+      .replace(/```([\s\S]*?)```/g,(_,c)=>keep('<pre>'+esc(c.trim())+'</pre>'))
+      .replace(/`([^`\n]+)`/g,(_,c)=>keep('<code>'+esc(c)+'</code>'))
+      .replace(/!\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)/g,(_,alt,u)=>keep('<img src="'+at(u)+'" alt="'+at(alt)+'">'))
+      .replace(/\[([^\]]+)\]\(\s*([^)\s]+)\s*\)/g,(_,t,u)=>keep('<a href="'+at(u)+'" target="_blank" rel="noopener">')+t+keep('</a>'))
+      .replace(/\*\*\*([^*]+)\*\*\*/g,'<b><i>$1</i></b>')
+      .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+      .replace(/(^|[^*\w])\*([^*\n]+)\*/g,'$1<i>$2</i>')
+      .replace(/(^|[^\w])_([^_\n]+)_(?!\w)/g,'$1<i>$2</i>')
+      .replace(/~~([^~]+)~~/g,'<s>$1</s>')
+      .replace(/^(#{1,4}) (.+)$/gm,(_,h,t)=>`<h${h.length}>${t}</h${h.length}>`)
+      .replace(/^&gt; ?(.+)$/gm,'<blockquote>$1</blockquote>')
+      .replace(/^---$/gm,'<hr>')
+      .replace(/"([^"\n]+)"/g,'<q>$1</q>')
+      .replace(/\n/g,'<br>');
+  }).join('').replace(/\u0000(\d+)\u0000/g,(_,n)=>stash[n]);
+}
+const pvCss=`:root{color-scheme:light dark}body{margin:0;padding:16px;font:15px/1.6 Georgia,"Times New Roman",serif;background:#f5f4f1;color:#222}
+@media(prefers-color-scheme:dark){body{background:#16181a;color:#dcdcd8}}
+.msg{background:rgba(127,127,127,.1);border-radius:10px;padding:12px 16px;margin-bottom:6px;overflow-wrap:anywhere}
+.lab{font:12px system-ui,sans-serif;color:#8a8f96;margin:16px 4px 5px}
+q{quotes:none;color:#2f7d82}q:before,q:after{content:'"'}
+@media(prefers-color-scheme:dark){q{color:#7cc4c9}}
+i{color:#8a6f9e}b{font-weight:700}code,pre{background:rgba(127,127,127,.18);padding:1px 4px;border-radius:4px;font-size:13px}pre{padding:8px;overflow:auto}
+blockquote{margin:6px 0;padding-left:10px;border-left:3px solid rgba(127,127,127,.5)}img{max-width:100%;height:auto}a{color:#2f7d82}.ph{color:#8d949c;font:14px system-ui,sans-serif;text-align:center;padding:40px}hr{border:0;border-top:1px solid rgba(127,127,127,.4)}`;
+let pt=0,pvDoc=null;
+const pvFrame=$('#pv');
+pvFrame.onload=()=>{pvDoc=pvFrame.contentDocument;if(card)preview(true)};
+pvFrame.srcdoc=`<!DOCTYPE html><meta charset="utf-8"><style>${pvCss}</style><div id="root"><div class="ph">Open a card to see the live view</div></div>`;
+function preview(now){clearTimeout(pt);pt=setTimeout(()=>{
+  if(!card||!pvDoc)return;
+  const d=card.data,all=[d.first_mes,...d.alternate_greetings],root=pvDoc.getElementById('root');
+  if(!root.dataset.live){root.innerHTML='';root.dataset.live=1}
+  while(root.children.length>all.length)root.lastChild.remove();
+  all.forEach((g,i)=>{                       // only touch greetings whose rendered HTML changed
+    let w=root.children[i];
+    if(!w){w=pvDoc.createElement('div');w.innerHTML='<div class="lab"></div><div class="msg"></div>';root.append(w)}
+    w.firstChild.textContent='Greeting '+(i+1);
+    const h=md(g||''),m=w.lastChild;
+    if(m.__h!==h){m.innerHTML=h;m.__h=h}
+  });
+},now===true?0:180)}
+
+/* ---------- Chrome ---------- */
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2200)}
+function setTab(id){
+  document.querySelectorAll('.tabs>button').forEach(x=>x.classList.toggle('on',x.dataset.t===id));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id===id));
+  if(card)document.querySelectorAll('#'+id+' textarea').forEach(grow);
+  syncNav();
+}
+document.querySelectorAll('.tabs>button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
+/* ---------- Jump navigator ---------- */
+const num=$('#num'),of=$('#of');
+const activePane=()=>document.querySelector('.pane.on');
+const items=()=>[...activePane().querySelectorAll('.item')];
+function syncNav(){const n=items().length;of.textContent='/ '+n;num.max=n;if(+num.value>n)num.value=Math.max(1,n)}
+function goTo(i){
+  const list=items();if(!list.length)return;
+  i=Math.min(list.length,Math.max(1,Math.round(i)||1));num.value=i;
+  const it=list[i-1];it.scrollIntoView({behavior:'smooth',block:'start'});
+  it.classList.remove('flash');void it.offsetWidth;it.classList.add('flash');
+  if(activePane().id==='gr'&&pvDoc){const w=pvDoc.getElementById('root').children[i-1];
+    if(w)w.scrollIntoView({behavior:'smooth',block:'start'})}   // preview follows
+}
+$('#prev').onclick=()=>goTo(+num.value-1);
+$('#next').onclick=()=>goTo(+num.value+1);
+$('#go').onclick=()=>goTo(+num.value);
+num.onchange=()=>goTo(+num.value);
+num.onkeydown=e=>{if(e.key==='Enter')goTo(+num.value)};
+$('#open').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{if(e.target.files[0])load(e.target.files[0]);e.target.value=''};
+$('#save').onclick=()=>saveDraft();
+$('#drafts').onclick=openDrafts;
+$('#dclose').onclick=()=>$('#dlg').close();
+$('#dlg').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.close()});
+$('#export').onclick=exportCard;
+addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveDraft()}});
+let dc=0;
+addEventListener('dragenter',e=>{e.preventDefault();dc++;$('#drop').classList.add('on')});
+addEventListener('dragleave',()=>{if(--dc<=0){dc=0;$('#drop').classList.remove('on')}});
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();dc=0;$('#drop').classList.remove('on');const f=e.dataTransfer.files[0];if(f)load(f)});
+/* ---------- Search ---------- */
+const qEl=$('#q'),qc=$('#qc');let cur=-1;
+function matches(){
+  const q=qEl.value.toLowerCase(),out=[];
+  if(!q||!card)return out;
+  for(const id of['df','gr','lb'])
+    document.querySelectorAll('#'+id+' textarea,#'+id+' input[type=text]').forEach(f=>{
+      const v=f.value.toLowerCase();
+      for(let i=v.indexOf(q);i>=0;i=v.indexOf(q,i+q.length))out.push({f,id,i});
+    });
+  return out;
+}
+function lineY(f,i){                    // vertical offset of character i inside a field
+  const cs=getComputedStyle(f),m=document.createElement('div'),sp=document.createElement('span');
+  m.style.cssText='position:absolute;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;border:0;box-sizing:border-box;width:'+f.clientWidth+'px;padding:'+cs.padding+';font-family:'+cs.fontFamily+';font-size:'+cs.fontSize+';line-height:'+cs.lineHeight;
+  m.textContent=f.value.slice(0,i);sp.textContent='\u200b';m.append(sp);document.body.append(m);
+  const y=sp.offsetTop;m.remove();return y;
+}
+function find(dir){
+  const m=matches();
+  if(!m.length){cur=-1;qc.textContent=qEl.value?'No match':'';return}
+  cur=cur<0?(dir>0?0:m.length-1):(Math.min(cur,m.length-1)+dir+m.length)%m.length;
+  const t=m[cur],len=qEl.value.length;
+  setTab(t.id);t.f.focus({preventScroll:true});t.f.setSelectionRange(t.i,t.i+len);
+  const p=activePane(),y=t.f.getBoundingClientRect().top-p.getBoundingClientRect().top+p.scrollTop+lineY(t.f,t.i);
+  p.scrollTo({top:y-p.clientHeight/3,behavior:'smooth'});
+  qc.textContent=(cur+1)+'/'+m.length;
+}
+qEl.oninput=()=>{cur=-1;const n=matches().length;qc.textContent=!qEl.value?'':n?n+' found':'No match'};
+qEl.onkeydown=e=>{
+  if(e.key==='Enter')find(e.shiftKey?-1:1);
+  if(e.key==='Escape'){qEl.value='';qEl.oninput()}
+};
+$('#qn').onclick=()=>find(1);
+$('#qp').onclick=()=>find(-1);
+addEventListener('keydown',e=>{if(e.key==='F3'){e.preventDefault();find(e.shiftKey?-1:1)}});
+
+// draft tracking
+['input','change'].forEach(t=>$('#left').addEventListener(t,e=>{if(!e.target.closest('.nav'))markDirty()}));
+$('#left').addEventListener('click',e=>{if(e.target.closest('.pane button'))markDirty()});
+allDrafts().then(l=>{if(l[0])loadDraft(l[0],true)});          // reopen the latest draft after a refresh
+setInterval(()=>{if(card&&pending)saveDraft(true)},5*60*1000);   // autosave every 5 min, only if there are changes
+// resizable divider
+const dv=$('#div'),left=$('#left'),mainEl=$('#main');
+dv.addEventListener('pointerdown',e=>{
+  e.preventDefault();dv.classList.add('drag');document.body.classList.add('dragging');
+  const move=ev=>{const r=mainEl.getBoundingClientRect();
+    const w=Math.min(r.width-210,Math.max(260,ev.clientX-r.left));left.style.flex='0 0 '+w+'px';left.style.width=w+'px'};
+  const up=()=>{dv.classList.remove('drag');document.body.classList.remove('dragging');
+    removeEventListener('pointermove',move);removeEventListener('pointerup',up);removeEventListener('pointercancel',up)};
+  addEventListener('pointermove',move);addEventListener('pointerup',up);addEventListener('pointercancel',up);
+});
+</script>
+</body>
+</html>
