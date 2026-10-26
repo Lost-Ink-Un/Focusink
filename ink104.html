@@ -50,6 +50,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .fs button{padding:2px 7px;font-size:12px}
 #qc{font-size:calc(var(--fs) - 2px);color:var(--mute);margin-left:4px;white-space:nowrap}
 #theme{padding:4px 10px;font-size:16px;line-height:1.2}
+.thumb{width:64px;height:96px;object-fit:cover;border-radius:6px;border:1px solid var(--line);background:var(--field)}
+.imgrow{display:flex;align-items:center;gap:12px}
 .pane{flex:1;overflow:auto;overscroll-behavior:contain;padding:14px;display:none}
 .pane.on{display:block}
 textarea,input[type=text],input[type=number],input[type=search],select{width:100%;font:inherit;font-size:var(--fs);color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
@@ -75,7 +77,7 @@ iframe{display:block;border:0;width:100%;min-height:100%;background:transparent}
 </head>
 <body>
 <header>
-  <button id="new" title="Start a blank card from an image">Create</button>
+  <button id="new" title="Start a blank card">Create</button>
   <button id="open" title="Open an existing card PNG">Import</button>
   <div class="fs"><button id="fsm" title="Smaller text">A&#8722;</button><button id="fsp" title="Larger text">A+</button></div>
   <div class="search">
@@ -117,7 +119,7 @@ iframe{display:block;border:0;width:100%;min-height:100%;background:transparent}
 <div id="drop">Drop PNG card to open</div>
 <div id="toast"></div>
 <input type="file" id="file" accept="image/png" hidden>
-<input type="file" id="img" accept="image/*" hidden>
+<input type="file" id="pic" accept="image/*" hidden>
 
 <script>
 const $=s=>document.querySelector(s);
@@ -217,14 +219,25 @@ async function ingest(buf,name,id,saved,fresh){
 /* ---------- New card ---------- */
 const blankCard=()=>({spec:'chara_card_v2',spec_version:'2.0',data:{name:'',description:'',personality:'',scenario:'',first_mes:'',
   mes_example:'',creator_notes:'',system_prompt:'',post_history_instructions:'',alternate_greetings:[],tags:[],creator:'',character_version:'',extensions:{}}});
-async function newCard(file){
+const canvasPng=cv=>new Promise(r=>cv.toBlob(b=>b.arrayBuffer().then(r),'image/png'));
+async function filePng(file){            // any image becomes a clean PNG (no old card data carried over)
+  const bmp=await createImageBitmap(file),cv=document.createElement('canvas');
+  cv.width=bmp.width;cv.height=bmp.height;cv.getContext('2d').drawImage(bmp,0,0);return canvasPng(cv);
+}
+function blankPng(){                     // neutral placeholder until an image is chosen
+  const cv=document.createElement('canvas'),c=cv.getContext('2d'),g=c.createLinearGradient(0,0,0,600);
+  cv.width=400;cv.height=600;g.addColorStop(0,'#5d6b73');g.addColorStop(1,'#2c3338');
+  c.fillStyle=g;c.fillRect(0,0,400,600);return canvasPng(cv);
+}
+async function newCard(){
   if(card&&!canDiscard())return;
-  try{                                   // any image becomes a clean PNG (no old card data carried over)
-    const bmp=await createImageBitmap(file),cv=document.createElement('canvas');
-    cv.width=bmp.width;cv.height=bmp.height;cv.getContext('2d').drawImage(bmp,0,0);
-    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
-    await ingest(await blob.arrayBuffer(),file.name.replace(/\.[^.]+$/,'')+'.png','i'+Date.now(),blankCard(),true);
-    setDirty(true);pending=true;toast('New card started');
+  try{await ingest(await blankPng(),'new card.png','i'+Date.now(),blankCard(),true);setDirty(true);pending=true}
+  catch(e){toast('Could not start a new card')}
+}
+async function setImage(file){
+  try{
+    pngBuf=await filePng(file);png=parsePng(pngBuf);imgId='i'+Date.now();   // new id: older drafts keep their own image
+    markDirty();renderDefinition();toast('Image updated');
   }catch(e){toast('Could not use that image')}
 }
 
@@ -278,7 +291,7 @@ function makePng(){
 }
 async function exportCard(){              // the only action that writes a PNG file
   if(!card)return;
-  const blob=makePng(),sug=fname.replace(/\.png$/i,'')+(isNew?'':' (edited)')+'.png';
+  const blob=makePng(),stem=fname.replace(/\.png$/i,''),sug=(isNew?(card.data.name||stem).replace(/[\\/:*?"<>|]/g,'_'):stem+' (edited)')+'.png';
   if(window.showSaveFilePicker){
     try{const h=await showSaveFilePicker({suggestedName:sug,types:FT});
       const w=await h.createWritable();await w.write(blob);await w.close();
@@ -295,10 +308,16 @@ async function exportCard(){              // the only action that writes a PNG f
 /* ---------- Editor ---------- */
 const el=(t,p={},...k)=>{const e=Object.assign(document.createElement(t),p);e.append(...k);return e};
 function grow(t){t.style.height='auto';t.style.height=Math.max(90,t.scrollHeight+2)+'px'}
+let thumbURL='';
 const DEF=[['name','Card name',1],['nickname','Display name (in chat)',1],['description','Description'],
   ['system_prompt','System prompt'],['mes_example','Example dialogs'],['creator_notes',"Author's note"]];
 function renderDefinition(){
   const box=$('#df'),d=card.data;box.innerHTML='';
+  if(thumbURL)URL.revokeObjectURL(thumbURL);
+  thumbURL=URL.createObjectURL(new Blob([pngBuf],{type:'image/png'}));
+  box.append(el('div',{className:'item'},el('div',{className:'top'},el('b',{},'Image')),
+    el('div',{className:'imgrow'},el('img',{className:'thumb',src:thumbURL,alt:'Card image'}),
+      el('button',{textContent:'Change image',onclick:()=>$('#pic').click()}))));
   DEF.forEach(([k,label,one])=>{
     const f=el(one?'input':'textarea',one?{type:'text',value:d[k]||''}:{value:d[k]||''});
     f.oninput=()=>{d[k]=f.value;if(!one)grow(f);preview()};
@@ -460,8 +479,8 @@ $('#go').onclick=()=>goTo(+num.value);
 num.onchange=()=>goTo(+num.value);
 num.onkeydown=e=>{if(e.key==='Enter')goTo(+num.value)};
 $('#open').onclick=()=>$('#file').click();
-$('#new').onclick=()=>$('#img').click();
-$('#img').onchange=e=>{if(e.target.files[0])newCard(e.target.files[0]);e.target.value=''};
+$('#new').onclick=()=>newCard();
+$('#pic').onchange=e=>{if(e.target.files[0])setImage(e.target.files[0]);e.target.value=''};
 $('#file').onchange=e=>{if(e.target.files[0])load(e.target.files[0]);e.target.value=''};
 $('#save').onclick=()=>saveDraft();
 $('#drafts').onclick=openDrafts;
