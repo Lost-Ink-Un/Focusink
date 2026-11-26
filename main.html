@@ -59,7 +59,14 @@ textarea,input[type=text],input[type=number],input[type=search],select{width:100
 textarea{resize:vertical;min-height:90px;line-height:1.5;field-sizing:content}
 .item{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:14px}
 .item .top{display:flex;align-items:center;gap:8px;margin-bottom:6px;color:var(--mute);font-size:calc(var(--fs) - 1px)}
-.item .top b{color:var(--ink);flex:1}
+.item .top{cursor:pointer}
+.item .top b{color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .top .fold{padding:0 6px;border:0;background:none;color:var(--mute);font-size:calc(var(--fs) + 2px);line-height:1}
+.item .top .pos{width:54px;padding:2px 4px;text-align:center;font-size:calc(var(--fs) - 2px)}
+.item .snip{display:none;font-weight:400;color:var(--mute);margin-left:8px}
+.item.collapsed .snip{display:inline}
+.item.collapsed>:not(.top){display:none}
+.item.collapsed .top{margin-bottom:0}
 .item .top button{padding:2px 9px;font-size:calc(var(--fs) - 2px)}
 .rm:hover{color:var(--danger);border-color:var(--danger)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
@@ -104,6 +111,7 @@ iframe{display:block;border:0;width:100%;min-height:100%;background:transparent}
         <span id="of">/ 0</span>
         <button id="next" aria-label="Next">&#8250;</button>
         <button id="go">Go</button>
+        <button id="fold" title="Collapse / expand all">Fold</button>
       </div>
     </div>
     <div class="pane on" id="df"></div>
@@ -210,7 +218,7 @@ async function ingest(buf,name,id,saved,fresh){
     if(t[0]==='ccv3')v3=JSON.parse(b64d(t[1]));}
   const base=v3||v2;
   if(!base&&!saved)throw Error('No character data found in this PNG');
-  png=chunks;pngBuf=buf;imgId=id;card=saved||normalize(base);hadV3=!!v3;fname=name;isNew=!!fresh;
+  foldG=[];png=chunks;pngBuf=buf;imgId=id;card=saved||normalize(base);hadV3=!!v3;fname=name;isNew=!!fresh;
   const d=card.data;
   d.alternate_greetings=d.alternate_greetings||[];
   d.first_mes=d.first_mes||'';
@@ -349,38 +357,58 @@ function renderDefinition(){
   const box=$('#df'),d=card.data;box.innerHTML='';
   if(thumbURL)URL.revokeObjectURL(thumbURL);
   thumbURL=URL.createObjectURL(new Blob([pngBuf],{type:'image/png'}));
-  box.append(el('div',{className:'item'},el('div',{className:'top'},el('b',{},'Image')),
+  const put=(item,key)=>{foldable(item,!!foldD[key],f=>foldD[key]=f);box.append(item)};
+  put(el('div',{className:'item'},el('div',{className:'top'},el('b',{},'Image')),
     el('div',{className:'imgrow'},el('img',{className:'thumb',src:thumbURL,alt:'Card image'}),
-      el('button',{textContent:'Change image',onclick:()=>$('#pic').click()}))));
+      el('button',{textContent:'Change image',onclick:()=>$('#pic').click()}))),'image');
   DEF.forEach(([k,label,one])=>{
     const f=el(one?'input':'textarea',one?{type:'text',value:d[k]||''}:{value:d[k]||''});
     f.oninput=()=>{d[k]=f.value;if(!one)grow(f);preview()};
-    box.append(el('div',{className:'item'},el('div',{className:'top'},el('b',{},label)),f));
+    put(el('div',{className:'item'},el('div',{className:'top'},el('b',{},label)),f),k);
   });
   box.querySelectorAll('textarea').forEach(grow);syncNav();
 }
 function renderAll(){renderDefinition();renderGreetings();renderLore();preview()}
 
-const arrows=(i,n,fn)=>[['\u2191',-1,i===0,'Move up'],['\u2193',1,i===n-1,'Move down']]
-  .map(([t,dir,off,title])=>el('button',{textContent:t,title,disabled:off,onclick:()=>fn(i,dir)}));
-function swap(a,i,dir){const j=i+dir;if(j<0||j>=a.length)return false;[a[i],a[j]]=[a[j],a[i]];return true}
-function settle(sel,i){const it=document.querySelectorAll(sel+' .item')[i];if(it){it.scrollIntoView({block:'nearest',behavior:'smooth'});it.classList.add('flash')}}
-function moveG(i,dir){
-  const d=card.data,all=[d.first_mes,...d.alternate_greetings];
-  if(!swap(all,i,dir))return;
-  d.first_mes=all[0];d.alternate_greetings=all.slice(1);renderGreetings();preview();settle('#gr',i+dir);
+let foldG=[],foldD={};const foldE=new WeakSet();    // collapsed state: greetings by index, definition by key, entries by object
+function foldable(item,folded,save){      // chevron in the title bar; clicking the title toggles too
+  const top=item.querySelector('.top'),chev=el('button',{className:'fold',title:'Collapse / expand'});
+  const set=f=>{item.classList.toggle('collapsed',f);chev.textContent=f?'\u25B8':'\u25BE';save(f);if(!f)item.querySelectorAll('textarea').forEach(grow)};
+  chev.onclick=()=>set(!item.classList.contains('collapsed'));
+  top.onclick=e=>{if(!e.target.closest('button,input'))chev.click()};
+  top.prepend(chev);item.fold=set;set(folded);
 }
+const arrows=(i,n,fn)=>[['\u2191',-1,i===0,'Move up'],['\u2193',1,i===n-1,'Move down']]
+  .map(([t,dir,off,title])=>el('button',{textContent:t,title,disabled:off,onclick:()=>fn(i,i+dir)}));
+const posBox=(i,n,fn)=>{                  // type a number to send the item to that position
+  const b=el('input',{type:'number',className:'pos',min:1,max:n,value:i+1,title:'Position: type a number to move this item'});
+  b.onchange=()=>fn(i,(+b.value||1)-1);
+  b.onkeydown=e=>{if(e.key==='Enter')b.blur()};
+  return b;
+};
+const clamp=(j,n)=>Math.min(n-1,Math.max(0,Math.round(j)||0));
+const reorder=(a,i,j)=>a.splice(j,0,...a.splice(i,1));
+function settle(sel,i){const it=document.querySelectorAll(sel+' .item')[i];if(it){it.scrollIntoView({block:'nearest',behavior:'smooth'});it.classList.add('flash')}}
+function moveG(i,j){
+  const d=card.data,all=[d.first_mes,...d.alternate_greetings];j=clamp(j,all.length);
+  if(j!==i){reorder(all,i,j);foldG.length=Math.max(foldG.length,all.length);reorder(foldG,i,j);
+    d.first_mes=all[0];d.alternate_greetings=all.slice(1);markDirty()}
+  renderGreetings();preview();if(j!==i)settle('#gr',j);
+}
+const oneLine=t=>t.replace(/\s+/g,' ').slice(0,70);
 function renderGreetings(){
   const box=$('#gr'),d=card.data;box.innerHTML='';
   const all=[d.first_mes,...d.alternate_greetings];
   all.forEach((txt,i)=>{
     const ta=el('textarea',{value:txt});
-    ta.oninput=()=>{if(i===0)d.first_mes=ta.value;else d.alternate_greetings[i-1]=ta.value;grow(ta);preview()};
-    const top=el('div',{className:'top'},el('b',{},i===0?'Greeting 1 · first message':'Greeting '+(i+1)));
-    top.append(...arrows(i,all.length,moveG));
+    ta.oninput=()=>{if(i===0)d.first_mes=ta.value;else d.alternate_greetings[i-1]=ta.value;snip.textContent=oneLine(ta.value);grow(ta);preview()};
+    const snip=el('span',{className:'snip',textContent:oneLine(txt)});
+    const top=el('div',{className:'top'},el('b',{},i===0?'Greeting 1 · first message':'Greeting '+(i+1),snip));
+    top.append(...arrows(i,all.length,moveG),posBox(i,all.length,moveG));
     if(i>0){const r=el('button',{className:'rm',textContent:'Remove'});
-      r.onclick=()=>{d.alternate_greetings.splice(i-1,1);renderGreetings();preview()};top.append(r)}
-    box.append(el('div',{className:'item'},top,ta));
+      r.onclick=()=>{d.alternate_greetings.splice(i-1,1);foldG.splice(i,1);renderGreetings();preview()};top.append(r)}
+    const item=el('div',{className:'item'},top,ta);
+    foldable(item,!!foldG[i],f=>foldG[i]=f);box.append(item);
   });
   box.append(el('button',{textContent:'Add greeting',onclick:()=>{d.alternate_greetings.push('');renderGreetings();preview();
     const l=box.querySelectorAll('textarea');l[l.length-1].focus();box.scrollTop=box.scrollHeight}}));
@@ -389,7 +417,11 @@ function renderGreetings(){
 
 function entryDefaults(){return{keys:[],secondary_keys:[],comment:'',name:'',content:'',enabled:true,constant:false,selective:false,
   case_sensitive:false,insertion_order:100,priority:10,position:'before_char',extensions:{}}}
-function moveE(i,dir){if(swap(card.data.character_book.entries,i,dir)){renderLore();settle('#lb',i+dir)}}
+function moveE(i,j){
+  const a=card.data.character_book.entries;j=clamp(j,a.length);
+  if(j!==i){reorder(a,i,j);markDirty()}
+  renderLore();if(j!==i)settle('#lb',j);
+}
 function renderLore(){
   const box=$('#lb'),d=card.data;box.innerHTML='';
   if(!d.character_book)d.character_book=null;
@@ -418,14 +450,15 @@ function renderLore(){
     const ct=el('textarea',{value:e.content||''});ct.oninput=()=>{e.content=ct.value;grow(ct)};
     const pos=el('select',{},...['before_char','after_char'].map(v=>el('option',{value:v,textContent:v.replace('_',' '),selected:e.position===v})));
     pos.onchange=()=>e.position=pos.value;
-    box.append(el('div',{className:'item'},
-      el('div',{className:'top'},title,...arrows(i,book.entries.length,moveE),rm),
+    const item=el('div',{className:'item'},
+      el('div',{className:'top'},title,...arrows(i,book.entries.length,moveE),posBox(i,book.entries.length,moveE),rm),
       el('div',{className:'grid'},lbl('Name / comment',inp('comment')),lbl('Keys (comma separated)',inp('keys','text',true))),
       lbl('Secondary keys (comma separated)',inp('secondary_keys','text',true)),
       el('div',{style:'margin-top:8px'},lbl('Content',ct)),
       el('div',{className:'checks'},chk('enabled','Enabled'),chk('constant','Constant'),chk('selective','Selective'),chk('case_sensitive','Case sensitive')),
       el('div',{className:'grid3'},lbl('Insertion order',inp('insertion_order','number')),lbl('Priority',inp('priority','number')),lbl('Position',pos)),
-      el('div',{className:'grid3'},ext('sticky','Sticky (turns)'),ext('cooldown','Cooldown (turns)'),ext('delay','Delay (turns)'))));
+      el('div',{className:'grid3'},ext('sticky','Sticky (turns)'),ext('cooldown','Cooldown (turns)'),ext('delay','Delay (turns)')));
+    foldable(item,foldE.has(e),f=>f?foldE.add(e):foldE.delete(e));box.append(item);
   });
   box.append(el('button',{textContent:'Add entry',onclick:()=>{
     const n=entryDefaults();n.id=book.entries.reduce((m,x)=>Math.max(m,Number(x.id)||0),-1)+1;book.entries.push(n);renderLore();box.scrollTop=box.scrollHeight}}),' ',el('button',{textContent:'Import lorebook',onclick:()=>$('#lbfile').click()}));
@@ -520,6 +553,7 @@ function goTo(i){
 $('#prev').onclick=()=>goTo(+num.value-1);
 $('#next').onclick=()=>goTo(+num.value+1);
 $('#go').onclick=()=>goTo(+num.value);
+$('#fold').onclick=()=>{const l=items(),open=l.some(x=>!x.classList.contains('collapsed'));l.forEach(x=>x.fold&&x.fold(open))};
 num.onchange=()=>goTo(+num.value);
 num.onkeydown=e=>{if(e.key==='Enter')goTo(+num.value)};
 $('#open').onclick=()=>$('#file').click();
@@ -561,7 +595,8 @@ function find(dir){
   if(!m.length){cur=-1;qc.textContent=qEl.value?'No match':'';return}
   cur=cur<0?(dir>0?0:m.length-1):(Math.min(cur,m.length-1)+dir+m.length)%m.length;
   const t=m[cur],len=qEl.value.length;
-  setTab(t.id);t.f.focus({preventScroll:true});t.f.setSelectionRange(t.i,t.i+len);
+  setTab(t.id);const it=t.f.closest('.item');if(it&&it.classList.contains('collapsed'))it.fold(false);
+  t.f.focus({preventScroll:true});t.f.setSelectionRange(t.i,t.i+len);
   const p=activePane(),y=t.f.getBoundingClientRect().top-p.getBoundingClientRect().top+p.scrollTop+lineY(t.f,t.i);
   p.scrollTo({top:y-p.clientHeight/3,behavior:'smooth'});
   qc.textContent=(cur+1)+'/'+m.length;
@@ -576,8 +611,8 @@ $('#qp').onclick=()=>find(-1);
 addEventListener('keydown',e=>{if(e.key==='F3'){e.preventDefault();find(e.shiftKey?-1:1)}});
 
 // draft tracking
-['input','change'].forEach(t=>$('#left').addEventListener(t,e=>{if(!e.target.closest('.nav'))markDirty()}));
-$('#left').addEventListener('click',e=>{if(e.target.closest('.pane button'))markDirty()});
+['input','change'].forEach(t=>$('#left').addEventListener(t,e=>{if(!e.target.closest('.nav,.pos'))markDirty()}));
+$('#left').addEventListener('click',e=>{if(e.target.closest('.pane button')&&!e.target.closest('.fold'))markDirty()});
 allDrafts().then(l=>{if(l[0])loadDraft(l[0],true)});          // reopen the latest draft after a refresh
 setInterval(()=>{if(card&&pending)saveDraft(true)},5*60*1000);   // autosave every 5 min, only if there are changes
 // resizable divider
